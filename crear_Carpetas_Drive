@@ -1,0 +1,50 @@
+function crearEstructuraDeCarpetas() {
+  try {
+    // ID de la carpeta principal que proporcionaste
+    var folderId = '15xkGKxvggsUFOftsFnv9gtHbCiUEEOhN';
+    
+    // Obtener la carpeta principal
+    var parentFolder = DriveApp.getFolderById(folderId);
+    Logger.log('Carpeta principal encontrada: ' + parentFolder.getName());
+    
+    // Nombres de los meses
+    var meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    // Años para crear las carpetas
+    var años = ['2024', '2025', '2026'];
+    
+    // Crear carpetas
+    años.forEach(function(año) {
+      var añoFolder = parentFolder.createFolder(año);
+      Logger.log('Creada carpeta: ' + año);
+      
+      meses.forEach(function(mes) {
+        añoFolder.createFolder(mes);
+        Logger.log('Creada subcarpeta: ' + año + '/' + mes);
+      });
+    });
+    
+    // Mensaje de éxito alternativo (sin usar SpreadsheetApp)
+    Logger.log('¡Estructura creada con éxito!');
+    console.log('¡Estructura creada con éxito!'); // También visible en ejecuciones
+    return '¡Estructura creada con éxito! Revisa los logs para detalles.';
+    
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+    console.error('Error: ' + e.message);
+    return 'Error: ' + e.message;
+  }
+}
+
+// Versión para ejecutar desde menú (opcional)
+function crearDesdeMenu() {
+  var resultado = crearEstructuraDeCarpetas();
+  SpreadsheetApp.getActiveSpreadsheet().toast(resultado, "Resultado", 5);
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('Generador de Carpetas')
+    .addItem('Crear estructura', 'crearDesdeMenu')
+    .addToUi();
+}
