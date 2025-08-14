@@ -1,0 +1,5 @@
+#COMENTARIOS
+
+CASE WHEN OBS IS NULL THEN CONCAT(Coment2," / ","Comisión real sin penalizaciones: ",TOTAL COMIS.," / "," Tiene ",Anuladas," anulaciones (",MONTO_VENTA*Anuladas,")") ELSE
+CONCAT(Coment2," / ","Comisión real sin penalizaciones: ",TOTAL COMIS.," / ",OBS," / "," Tiene ",Anuladas," anulaciones (",PAGO VENTA *Anuladas,")")
+END 
