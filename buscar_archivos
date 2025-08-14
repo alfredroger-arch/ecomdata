@@ -1,0 +1,96 @@
+function obtenerInformacionCarpetaCompleta() {
+  // ID de la carpeta principal
+  var idCarpetaPrincipal = '1yDiXQgYPTtXdZ67J1Gp1Koo84L62y3U7';
+  
+  // Crear una nueva hoja de cálculo para los resultados
+  var fechaHoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var nombreSpreadsheet = 'Información Carpeta Drive - ' + fechaHoy;
+  var spreadsheet = SpreadsheetApp.create(nombreSpreadsheet);
+  var sheet = spreadsheet.getActiveSheet();
+  
+  // Encabezados con formato
+  var headers = ['Nombre', 'ID_carpeta', 'Tipo', 'Tamaño (KB)', 'URL', 'Carpeta_principal', 'Ruta Completa'];
+  sheet.appendRow(headers);
+  
+  // Aplicar formato a los encabezados
+  var headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange.setBackground('#4a86e8')
+             .setFontColor('white')
+             .setFontWeight('bold');
+  
+  // Obtener carpeta principal
+  var carpetaPrincipal = DriveApp.getFolderById(idCarpetaPrincipal);
+  
+  // Procesar recursivamente desde la carpeta principal
+  procesarCarpetaRecursiva(carpetaPrincipal, sheet, '', carpetaPrincipal.getName());
+  
+  // Autoajustar columnas
+  for (var i = 1; i <= headers.length; i++) {
+    sheet.autoResizeColumn(i);
+  }
+  
+  // Congelar la fila de encabezados
+  sheet.setFrozenRows(1);
+  
+  // Mostrar mensaje con enlace
+  var url = spreadsheet.getUrl();
+  Logger.log('Proceso completado. Hoja de cálculo creada: ' + url);
+  
+  // Si se ejecuta desde un menú o trigger, mostrar alerta
+  try {
+    SpreadsheetApp.getUi().alert('Proceso completado', 'Se ha creado la hoja de cálculo: ' + url, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    // Si no está disponible el UI, simplemente continuar
+  }
+  
+  return url;
+}
+
+function procesarCarpetaRecursiva(carpeta, sheet, rutaPadre, nombreCarpetaPrincipal) {
+  var rutaActual = rutaPadre ? rutaPadre + ' / ' + carpeta.getName() : carpeta.getName();
+  
+  // Procesar la carpeta actual (solo si no es la raíz)
+  if (rutaPadre !== '') {
+    var datosCarpeta = [
+      carpeta.getName(),
+      carpeta.getId(),
+      'Carpeta',
+      '0',
+      carpeta.getUrl(),
+      nombreCarpetaPrincipal,
+      rutaActual
+    ];
+    sheet.appendRow(datosCarpeta);
+  }
+  
+  // Procesar archivos en esta carpeta
+  var archivos = carpeta.getFiles();
+  while (archivos.hasNext()) {
+    var archivo = archivos.next();
+    procesarArchivo(archivo, sheet, nombreCarpetaPrincipal, rutaActual);
+  }
+  
+  // Procesar subcarpetas recursivamente
+  var subCarpetas = carpeta.getFolders();
+  while (subCarpetas.hasNext()) {
+    var subCarpeta = subCarpetas.next();
+    procesarCarpetaRecursiva(subCarpeta, sheet, rutaActual, nombreCarpetaPrincipal);
+  }
+}
+
+function procesarArchivo(archivo, sheet, nombreCarpetaPrincipal, ruta) {
+  try {
+    var datos = [
+      archivo.getName(),
+      archivo.getId(),
+      'Archivo (' + archivo.getMimeType() + ')',
+      (archivo.getSize() / 1024).toFixed(2),
+      archivo.getUrl(),
+      nombreCarpetaPrincipal,
+      ruta + ' / ' + archivo.getName()
+    ];
+    sheet.appendRow(datos);
+  } catch (e) {
+    Logger.log('Error procesando archivo ' + archivo.getName() + ': ' + e.toString());
+  }
+}
