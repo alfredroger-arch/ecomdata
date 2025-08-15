@@ -1,0 +1,50 @@
+import pandas as pd
+from openpyxl import load_workbook
+import os
+
+# --- Configuración (EDITA ESTO) ---
+# Ruta de la carpeta donde están los 4 archivos Excel (cambia esto por tu ruta)
+ruta_carpeta = r'C:\Users\A365\Downloads\VACACIONES'  # Ejemplo para Windows
+# ruta_carpeta = "/home/usuario/CarpetaConExcels"  # Ejemplo para Linux/Mac
+
+# Nombre del archivo de salida
+output_file = "archivo_unido.xlsx"
+
+# --- Procesamiento (no tocar) ---
+# Listar archivos Excel (ignorando temporales/ocultos)
+archivos = [
+    archivo for archivo in os.listdir(ruta_carpeta)
+    if archivo.endswith('.xlsx') and not archivo.startswith('~$')
+]
+
+# Mostrar archivos detectados (para verificación)
+print("Archivos detectados en la carpeta:")
+for i, archivo in enumerate(archivos, 1):
+    print(f"{i}. {archivo}")
+
+# Verificar que haya al menos 4 archivos
+if len(archivos) < 4:
+    raise ValueError(f"Error: Solo se encontraron {len(archivos)} archivos Excel. Se requieren 4.")
+archivos = archivos[:4]  # Tomar solo los primeros 4
+
+# Crear el archivo unido
+writer = pd.ExcelWriter(os.path.join(ruta_carpeta, output_file), engine='openpyxl')
+
+for archivo in archivos:
+    ruta_completa = os.path.join(ruta_carpeta, archivo)
+    df = pd.read_excel(ruta_completa, sheet_name=0)
+    nombre_hoja = os.path.splitext(archivo)[0][:12]  # Primeros 12 caracteres sin extensión
+    df.to_excel(writer, sheet_name=nombre_hoja, index=False)
+    
+    # Mantener formato (ancho de columnas)
+    libro_original = load_workbook(ruta_completa)
+    hoja_original = libro_original.active
+    hoja_destino = writer.sheets[nombre_hoja]
+    
+    for col in hoja_original.columns:
+        columna = col[0].column_letter
+        max_length = max(len(str(celda.value)) for celda in col if celda.value)
+        hoja_destino.column_dimensions[columna].width = (max_length + 2) * 1.2
+
+writer.close()
+print(f"\n¡Se unieron los 4 archivos en '{output_file}' dentro de la carpeta!")
