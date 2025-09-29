@@ -1,0 +1,89 @@
+import pandas as pd
+import os
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+def dividir_excel_por_gerencia_con_formato(ruta_archivo, carpeta_salida):
+    """
+    Divide un archivo Excel en múltiples archivos según los valores en la columna 'GERENCIA',
+    manteniendo el formato original del archivo (ancho de columnas, estilos, etc.)
+    """
+    
+    # Verificar si el archivo existe
+    if not os.path.exists(ruta_archivo):
+        print(f"Error: El archivo no existe en la ruta especificada: {ruta_archivo}")
+        return
+    
+    try:
+        # Crear la carpeta de salida si no existe
+        os.makedirs(carpeta_salida, exist_ok=True)
+        
+        # Verificar permisos de escritura
+        test_file = os.path.join(carpeta_salida, 'test_permission.txt')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except PermissionError:
+            print(f"Error: No tienes permisos para escribir en la carpeta: {carpeta_salida}")
+            return
+
+        # Cargar el archivo original con openpyxl para obtener el formato
+        libro_original = load_workbook(ruta_archivo)
+        hoja_original = libro_original['base']  # Asume que la hoja se llama 'base'
+        
+        # Leer los datos con pandas
+        df = pd.read_excel(ruta_archivo, sheet_name='base')
+        
+        # Verificar que exista la columna GERENCIA
+        if 'GERENCIA' not in df.columns:
+            print("Error: No se encontró la columna 'GERENCIA' en el archivo Excel.")
+            return
+        
+        # Obtener los anchos de columna del original
+        anchos_columnas = []
+        for col in hoja_original.columns:
+            anchos_columnas.append(hoja_original.column_dimensions[col[0].column_letter].width)
+        
+        # Dividir el DataFrame por cada valor único en GERENCIA
+        for gerencia, grupo in df.groupby('GERENCIA'):
+            # Crear un nombre de archivo válido
+            nombre_archivo = f"{gerencia}.xlsx".replace('/', '_').replace('\\', '_').replace(':', '_')
+            ruta_completa = os.path.join(carpeta_salida, nombre_archivo)
+            
+            # Crear un nuevo libro de trabajo
+            nuevo_libro = load_workbook(ruta_archivo)
+            nueva_hoja = nuevo_libro['base']
+            
+            # Limpiar la hoja (excepto cabeceras si es necesario)
+            nueva_hoja.delete_rows(2, nueva_hoja.max_row)  # Asume que la fila 1 son los encabezados
+            
+            # Escribir los datos del grupo
+            for r_idx, row in enumerate(dataframe_to_rows(grupo, index=False, header=False), 2):
+                for c_idx, value in enumerate(row, 1):
+                    nueva_hoja.cell(row=r_idx, column=c_idx, value=value)
+            
+            # Aplicar los anchos de columna originales
+            for i, ancho in enumerate(anchos_columnas, 1):
+                letra_columna = nueva_hoja.cell(row=1, column=i).column_letter
+                nueva_hoja.column_dimensions[letra_columna].width = ancho
+            
+            # Guardar el archivo
+            nuevo_libro.save(ruta_completa)
+            nuevo_libro.close()
+            
+            print(f"Archivo creado con formato: {nombre_archivo}")
+        
+        libro_original.close()
+        print("\nProceso completado. Todos los archivos han sido generados manteniendo el formato original.")
+    
+    except Exception as e:
+        print(f"Ocurrió un error: {str(e)}")
+
+# Configuración de rutas (MODIFICA ESTAS RUTAS SEGÚN TUS NECESIDADES)
+RUTA_ARCHIVO_EXCEL = r"C:\Users\A365\Downloads\informe_vacaciones\REPORTE_de_Vacaciones.xlsx"
+CARPETA_DESTINO = r"c:\Users\A365\Downloads\informe_vacaciones"
+
+# Ejecutar la función con las rutas configuradas
+if __name__ == "__main__":
+    dividir_excel_por_gerencia_con_formato(RUTA_ARCHIVO_EXCEL, CARPETA_DESTINO)
