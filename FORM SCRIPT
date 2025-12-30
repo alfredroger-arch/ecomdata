@@ -1,0 +1,383 @@
+// Configuración
+var SHEET_ID = '1CO5DzvDk61oeqYA-Ba4jtopPYZ_xN_jOj7EYY145bJw';
+var SHEET_NAME = 'BASE';
+var DRIVE_FOLDER_ID = '1U9sZ3bOx3ikHdZx2ourY-20PDIfsy1nY'; // Tu carpeta Drive
+var MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB en bytes
+
+// FUNCIÓN PRINCIPAL - Acepta parámetros de URL
+function doGet(e) {
+  console.log('=== FORMULARIO EJECUTADO ===');
+  
+  // Obtener parámetros de la URL
+  var params = e ? e.parameter : {};
+  
+  // Crear objeto con todos los parámetros prellenados
+  var prefillData = {
+    dni: params.DNI || params.dni || '',
+    fecha: params.Fecha || params.fecha || '',
+    asiste: params.Asiste || '',
+    nombres_apellidos: params.NOMBRES_APELLIDOS || '',
+    supervisor: params.SUPERVISOR_OPERACIONES || '',
+    cargo: params.CARGO || '',
+    camp: params.CAMP || '',
+    t_trabajo: params.T_TRABAJO || '',
+    codigo_id: params.CODIGO_ID || '',
+    compensado: params.Compensado || '',
+    fecha_compensado: params.Fecha_compensado || ''
+  };
+  
+  console.log('Datos recibidos:', prefillData);
+  
+  // Pasar parámetros al HTML
+  var template = HtmlService.createTemplateFromFile('Formulario');
+  
+  // Asignar todos los datos al template
+  template.dni = prefillData.dni;
+  template.fecha = prefillData.fecha;
+  template.asiste = prefillData.asiste;
+  template.nombres_apellidos = prefillData.nombres_apellidos;
+  template.supervisor = prefillData.supervisor;
+  template.cargo = prefillData.cargo;
+  template.camp = prefillData.camp;
+  template.t_trabajo = prefillData.t_trabajo;
+  template.codigo_id = prefillData.codigo_id;
+  template.compensado = prefillData.compensado;
+  template.fecha_compensado = prefillData.fecha_compensado;
+  
+  return template.evaluate()
+    .setTitle('Registro de Asistencia')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// Función para procesar los datos
+function procesarDatos(data) {
+  console.log('=== PROCESANDO DATOS ===');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Datos recibidos keys:', Object.keys(data));
+  
+  try {
+    // Validar que el DNI no esté vacío
+    if (!data || !data.dni || data.dni.toString().trim() === '') {
+      console.error('❌ Error: DNI vacío');
+      return { 
+        success: false, 
+        message: 'El DNI es requerido' 
+      };
+    }
+    
+    var dni = data.dni.toString().trim();
+    var archivoUrl = '';
+    var archivoNombre = '';
+    var archivoId = '';
+    var archivoSubido = false;
+    
+    // Procesar archivo si existe
+    if (data.archivoBase64 && data.archivoNombre && data.codigo_id && data.codigo_id.toString().trim() !== '') {
+      console.log('✅ Subiendo archivo a Drive...');
+      
+      var uploadResult = subirArchivoDrive(
+        data.archivoBase64, 
+        data.archivoNombre, 
+        data.archivoTipo,
+        data.codigo_id.toString().trim()
+      );
+      
+      console.log('Resultado de subida:', uploadResult);
+      
+      if (uploadResult.success) {
+        archivoUrl = uploadResult.url;
+        archivoNombre = uploadResult.nombre;
+        archivoId = uploadResult.id;
+        archivoSubido = true;
+        console.log('✅ Archivo subido exitosamente:', archivoNombre);
+      } else {
+        console.warn('❌ Error subiendo archivo:', uploadResult.message);
+      }
+    } else {
+      console.log('ℹ️ No se subirá archivo (no cumple condiciones)');
+    }
+    
+    // Conectar con Google Sheets
+    var spreadsheet = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = spreadsheet.getSheetByName(SHEET_NAME);
+    
+    if (!sheet) {
+      console.error('❌ Error: No se encontró la hoja:', SHEET_NAME);
+      return { 
+        success: false, 
+        message: 'No se encontró la hoja de destino' 
+      };
+    }
+    
+    // Obtener la última fila con datos
+    var ultimaFila = sheet.getLastRow();
+    var filaDestino = Math.max(ultimaFila + 1, 2);
+    
+    console.log('📝 Guardando en fila:', filaDestino);
+    
+    // Preparar datos para guardar (19 columnas)
+    var datosFila = [
+      dni, // Columna A: DNI
+      data.fecha || '', // Columna B: Fecha
+      '', // Columna C: Entrada (removido)
+      '', // Columna D: Salida (removido)
+      data.asiste || '', // Columna E: Asiste
+      data.nombres_apellidos || '', // Columna F: NOMBRES APELLIDOS
+      data.supervisor || '', // Columna G: SUPERVISOR OPERACIONES
+      data.cargo || '', // Columna H: CARGO
+      data.camp || '', // Columna I: CAMP
+      data.t_trabajo || '', // Columna J: T_TRABAJO
+      data.codigo_id || '', // Columna K: CODIGO_ID
+      data.compensado || '', // Columna L: Compensado
+      data.fecha_compensado || '', // Columna M: Fecha compensado
+      data.observaciones || '', // Columna N: Observaciones
+      new Date(), // Columna O: Fecha de registro
+      data.source || 'formulario', // Columna P: Origen
+      Session.getActiveUser().getEmail() || 'anonimo@dominio.com', // Columna Q: Usuario
+      archivoUrl, // Columna R: URL del archivo
+      archivoNombre // Columna S: Nombre del archivo
+    ];
+    
+    // Guardar en una sola operación
+    sheet.getRange(filaDestino, 1, 1, datosFila.length).setValues([datosFila]);
+    
+    // Formato de celdas
+    if (data.fecha) sheet.getRange(filaDestino, 2).setNumberFormat('yyyy-mm-dd');
+    if (data.fecha_compensado) sheet.getRange(filaDestino, 13).setNumberFormat('yyyy-mm-dd');
+    sheet.getRange(filaDestino, 15).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+    
+    // Si hay archivo, hacer hipervínculo en columna R
+    if (archivoUrl) {
+      var formula = '=HYPERLINK("' + archivoUrl + '", "📎 Ver archivo")';
+      sheet.getRange(filaDestino, 18).setFormula(formula);
+      sheet.getRange(filaDestino, 18).setFontColor('#1155cc');
+      sheet.getRange(filaDestino, 18).setFontWeight('bold');
+    }
+    
+    console.log('✅ Datos guardados exitosamente en fila:', filaDestino);
+    
+    return { 
+      success: true, 
+      message: 'Registro guardado exitosamente' + (archivoSubido ? ' con archivo adjunto' : ''),
+      details: {
+        row: filaDestino,
+        dni: dni,
+        nombre: data.nombres_apellidos || '',
+        fecha: new Date().toLocaleDateString('es-ES'),
+        archivo: archivoNombre || 'Sin archivo',
+        archivoUrl: archivoUrl || '',
+        codigo_id: data.codigo_id || '',
+        archivoSubido: archivoSubido
+      }
+    };
+    
+  } catch (error) {
+    console.error('❌ Error en procesarDatos:', error);
+    return { 
+      success: false, 
+      message: 'Error al procesar: ' + error.toString(),
+      error: error.message
+    };
+  }
+}
+
+// Función para subir archivo a Google Drive - SOLO CÓDIGO COMO NOMBRE
+function subirArchivoDrive(base64Data, fileName, mimeType, codigoID) {
+  console.log('=== SUBIENDO ARCHIVO A DRIVE ===');
+  console.log('Archivo original:', fileName);
+  console.log('Código ID:', codigoID);
+  
+  try {
+    // Validar que los datos Base64 no estén vacíos
+    if (!base64Data || base64Data.trim() === '' || base64Data === 'undefined') {
+      console.error('❌ ERROR: Datos Base64 vacíos');
+      return {
+        success: false,
+        message: 'Los datos del archivo están vacíos'
+      };
+    }
+    
+    // Validar tamaño del archivo (20MB máximo)
+    var fileSize = (base64Data.length * 3) / 4;
+    if (fileSize > MAX_FILE_SIZE) {
+      console.error('❌ Error: Archivo excede tamaño máximo');
+      return {
+        success: false,
+        message: 'El archivo excede el tamaño máximo de 20MB'
+      };
+    }
+    
+    // Convertir Base64 a blob
+    var byteCharacters;
+    try {
+      byteCharacters = Utilities.base64Decode(base64Data);
+    } catch (decodeError) {
+      console.error('❌ Error decodificando Base64:', decodeError.message);
+      return {
+        success: false,
+        message: 'Error en formato Base64: ' + decodeError.message
+      };
+    }
+    
+    var blob = Utilities.newBlob(byteCharacters, mimeType, fileName);
+    
+    // Obtener carpeta destino
+    var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    if (!folder) {
+      throw new Error('No se encontró la carpeta destino en Drive');
+    }
+    
+    // CREAR NOMBRE DEL ARCHIVO: SOLO EL CÓDIGO + EXTENSIÓN
+    var safeCodigo = codigoID.toString().trim();
+    
+    // Eliminar caracteres inválidos para nombre de archivo
+    safeCodigo = safeCodigo.replace(/[\/\\?%*:|"<>]/g, '_');
+    
+    // Obtener extensión del archivo original
+    var extension = fileName.split('.').pop() || getExtensionFromMimeType(mimeType) || 'bin';
+    
+    // Crear nombre final: SOLO CÓDIGO.EXTENSIÓN
+    var newFileName = safeCodigo + '.' + extension;
+    
+    console.log('Nuevo nombre de archivo (solo código):', newFileName);
+    
+    // Verificar si ya existe un archivo con ese nombre
+    var existingFiles = folder.getFilesByName(newFileName);
+    if (existingFiles.hasNext()) {
+      // Si existe, agregar número de versión
+      var version = 1;
+      var baseName = safeCodigo;
+      
+      // Buscar siguiente versión disponible
+      while (folder.getFilesByName(baseName + '_' + version + '.' + extension).hasNext()) {
+        version++;
+      }
+      
+      newFileName = baseName + '_' + version + '.' + extension;
+      console.log('Archivo ya existe, usando nombre con versión:', newFileName);
+    }
+    
+    // Subir archivo a Drive
+    var file = folder.createFile(blob);
+    file.setName(newFileName);
+    file.setDescription('Subido desde formulario de asistencia - Código: ' + codigoID);
+    
+    // Dar permisos de visualización
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    var fileUrl = file.getUrl();
+    var fileId = file.getId();
+    
+    console.log('✅ Archivo subido exitosamente!');
+    console.log('🆔 ID:', fileId);
+    console.log('🔗 URL:', fileUrl);
+    
+    return {
+      success: true,
+      url: fileUrl,
+      nombre: newFileName,
+      id: fileId,
+      size: file.getSize(),
+      mimeType: file.getMimeType()
+    };
+    
+  } catch (error) {
+    console.error('❌ Error subiendo archivo a Drive:', error);
+    return {
+      success: false,
+      message: 'Error subiendo archivo: ' + error.message
+    };
+  }
+}
+
+// Función para obtener extensión desde MIME type
+function getExtensionFromMimeType(mimeType) {
+  const mimeToExt = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'text/plain': 'txt',
+    'text/csv': 'csv'
+  };
+  return mimeToExt[mimeType] || null;
+}
+
+// Agrega esta función al final de tu Google Script
+function verificarDrive() {
+  console.log('=== VERIFICACIÓN DRIVE ===');
+  console.log('ID Carpeta:', DRIVE_FOLDER_ID);
+  console.log('Fecha:', new Date().toISOString());
+  
+  try {
+    // 1. Intentar acceder a la carpeta
+    console.log('1. Accediendo a la carpeta...');
+    var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    console.log('✅ Carpeta encontrada:', folder.getName());
+    console.log('🔗 URL carpeta:', folder.getUrl());
+    
+    // 2. Verificar permisos de escritura
+    console.log('2. Probando permisos de escritura...');
+    var testFile = folder.createFile('test_verificacion.txt', 'Archivo de prueba - ' + new Date().toISOString());
+    console.log('✅ Archivo de prueba creado:', testFile.getName());
+    console.log('🆔 ID archivo:', testFile.getId());
+    console.log('🔗 URL archivo:', testFile.getUrl());
+    
+    // 3. Contar archivos existentes
+    console.log('3. Contando archivos existentes...');
+    var files = folder.getFiles();
+    var count = 0;
+    while (files.hasNext()) {
+      var file = files.next();
+      count++;
+      if (count <= 3) {
+        console.log('   - ' + file.getName() + ' (' + file.getSize() + ' bytes)');
+      }
+    }
+    console.log('📊 Total archivos en carpeta:', count);
+    
+    // 4. NO eliminar el archivo de prueba - dejarlo como evidencia
+    console.log('ℹ️ Archivo de prueba NO eliminado para verificación');
+    
+    return {
+      success: true,
+      message: '✅ Drive configurado correctamente',
+      folder: folder.getName(),
+      totalFiles: count,
+      testFile: {
+        name: testFile.getName(),
+        id: testFile.getId(),
+        url: testFile.getUrl()
+      }
+    };
+    
+  } catch (error) {
+    console.error('❌ ERROR:', error);
+    return {
+      success: false,
+      message: '❌ Error: ' + error.message,
+      error: error.toString()
+    };
+  }
+}
+
+// Función para verificar Base64
+function verificarBase64(data) {
+  console.log('=== VERIFICACIÓN BASE64 ===');
+  console.log('Longitud Base64 recibida:', data.length);
+  console.log('Primeros 50 chars:', data.substring(0, 50));
+  console.log('Últimos 50 chars:', data.substring(data.length - 50));
+  
+  try {
+    var bytes = Utilities.base64Decode(data);
+    console.log('✅ Base64 válido, bytes decodificados:', bytes.length);
+    return { success: true, bytes: bytes.length };
+  } catch (e) {
+    console.error('❌ Base64 inválido:', e.message);
+    return { success: false, error: e.message };
+  }
+}
