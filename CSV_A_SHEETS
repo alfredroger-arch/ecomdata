@@ -1,0 +1,814 @@
+function procesarCSVConValidacionYPorcentajes() {
+  try {
+    console.log('=== PROCESO CSV CON VALIDACIÓN Y CONVERSIÓN DE PORCENTAJES ===');
+    
+    // IDs y configuraciones
+    const CARPETA_DRIVE_ID = '17RfxtXxQk8EsQAly6dLiE3vvNyx5joET';
+    const LIBRO_DESTINO_ID = '11TmSWtF0nbUQQxmhKLlWyVhZ5k0xNez10sKpOXHDJGg';
+    const HOJA_DESTINO = 'BASE';
+    const FILA_INICIO_DATOS = 2;
+    
+    // 1. Buscar archivo CSV
+    console.log('1. Buscando archivo CSV...');
+    const carpeta = DriveApp.getFolderById(CARPETA_DRIVE_ID);
+    const archivos = carpeta.getFiles();
+    
+    let csvFile = null;
+    let csvFileName = '';
+    while (archivos.hasNext()) {
+      const archivo = archivos.next();
+      const nombre = archivo.getName();
+      if (nombre.includes('AppSheet.ViewData')) {
+        csvFile = archivo;
+        csvFileName = nombre;
+        console.log(`✓ Archivo: ${nombre}`);
+        break;
+      }
+    }
+    
+    if (!csvFile) {
+      throw new Error('No se encontró archivo CSV');
+    }
+    
+    // 2. Leer contenido
+    console.log('\n2. Leyendo contenido...');
+    const contenido = csvFile.getBlob().getDataAsString('UTF-8');
+    
+    // 3. Detectar delimitador
+    console.log('\n3. Detectando delimitador...');
+    const delimitador = detectarDelimitadorPorMuestreo(contenido, 100);
+    console.log(`✓ Delimitador detectado: "${delimitador}"`);
+    
+    // 4. Parsear CSV con validación
+    console.log('\n4. Parseando CSV con validación...');
+    const { lineas, problemas } = parsearCSVConValidacion(contenido, delimitador);
+    
+    if (problemas.length > 0) {
+      console.log(`⚠️ Se encontraron ${problemas.length} problemas de parseo`);
+    }
+    
+    if (lineas.length === 0) {
+      throw new Error('No se encontraron datos válidos');
+    }
+    
+    // 5. Analizar cabeceras
+    const cabeceras = lineas[0];
+    console.log(`\n✓ Cabeceras: ${cabeceras.length} columnas`);
+    
+    // 6. Identificar columnas que contienen porcentajes
+    console.log('\n5. Analizando tipos de datos y porcentajes...');
+    const { columnasConPorcentajes, estadisticas } = identificarColumnasConPorcentajes(lineas);
+    
+    console.log('   Estadísticas de análisis:');
+    console.log(`   - Columnas analizadas: ${estadisticas.columnasAnalizadas}`);
+    console.log(`   - Columnas con porcentajes: ${columnasConPorcentajes.length}`);
+    console.log(`   - Muestras analizadas: ${estadisticas.muestrasAnalizadas}`);
+    
+    if (columnasConPorcentajes.length > 0) {
+      console.log('   Columnas que contienen porcentajes:');
+      columnasConPorcentajes.forEach(col => {
+        console.log(`     - Columna ${col.indice + 1}: "${cabeceras[col.indice]}"`);
+        console.log(`       Ejemplos: ${col.ejemplos.slice(0, 3).map(e => `"${e}"`).join(', ')}`);
+      });
+    } else {
+      console.log('   No se encontraron columnas con porcentajes');
+    }
+    
+    // 7. Obtener datos
+    const datosOriginales = lineas.slice(1);
+    const totalRegistros = datosOriginales.length;
+    console.log(`\n✓ Total registros: ${totalRegistros}`);
+    
+    // 8. Convertir porcentajes en los datos
+    console.log('\n6. Convertiendo porcentajes...');
+    const datosConvertidos = convertirPorcentajesEnDatos(datosOriginales, columnasConPorcentajes);
+    
+    // Mostrar estadísticas de conversión
+    const { registrosConvertidos, porcentajesConvertidos } = datosConvertidos.estadisticas;
+    console.log(`   Registros con conversiones: ${registrosConvertidos}/${totalRegistros}`);
+    console.log(`   Porcentajes convertidos: ${porcentajesConvertidos}`);
+    
+    // Mostrar ejemplos de conversión
+    if (porcentajesConvertidos > 0 && datosConvertidos.datos.length > 0) {
+      console.log('\n   Ejemplos de conversión:');
+      
+      // Tomar primeros 3 registros que tuvieron conversiones
+      let ejemplosMostrados = 0;
+      for (let i = 0; i < Math.min(3, datosConvertidos.datos.length) && ejemplosMostrados < 3; i++) {
+        const registroOriginal = datosOriginales[i];
+        const registroConvertido = datosConvertidos.datos[i];
+        
+        // Verificar si este registro tuvo conversiones
+        let tuvoConversion = false;
+        const cambios = [];
+        
+        columnasConPorcentajes.forEach(col => {
+          const original = registroOriginal[col.indice];
+          const convertido = registroConvertido[col.indice];
+          
+          if (original !== convertido && esPorcentaje(original)) {
+            tuvoConversion = true;
+            cambios.push({
+              columna: col.indice + 1,
+              cabecera: cabeceras[col.indice],
+              original: original,
+              convertido: convertido
+            });
+          }
+        });
+        
+        if (tuvoConversion && cambios.length > 0) {
+          console.log(`   Registro ${i + 1}:`);
+          cambios.forEach(cambio => {
+            console.log(`     Col ${cambio.columna} (${cambio.cabecera}):`);
+            console.log(`       "${cambio.original}" → ${cambio.convertido}`);
+          });
+          ejemplosMostrados++;
+        }
+      }
+    }
+    
+    // 9. Validar registros críticos
+    console.log('\n7. Validación de registros críticos...');
+    const registrosCriticos = validarRegistrosCriticos(datosConvertidos.datos, cabeceras.length);
+    
+    if (registrosCriticos.problemas.length > 0) {
+      console.log('⚠️ PROBLEMAS ENCONTRADOS:');
+      registrosCriticos.problemas.forEach(p => {
+        console.log(`   Registro ${p.registro}: ${p.mensaje}`);
+      });
+    } else {
+      console.log('✅ Todos los registros críticos están OK');
+    }
+    
+    // 10. Dividir en 3 partes
+    console.log('\n8. Dividiendo en 3 partes...');
+    const partes = 3;
+    const registrosPorParte = Math.ceil(totalRegistros / partes);
+    const partesDatos = [];
+    
+    for (let i = 0; i < partes; i++) {
+      const inicio = i * registrosPorParte;
+      const fin = Math.min(inicio + registrosPorParte, totalRegistros);
+      
+      if (inicio >= fin) continue;
+      
+      const parteDatos = datosConvertidos.datos.slice(inicio, fin);
+      partesDatos.push({
+        indice: i + 1,
+        datos: parteDatos,
+        inicio: inicio + 1,
+        fin: fin,
+        cantidad: parteDatos.length
+      });
+      
+      console.log(`✓ Parte ${i + 1}: registros ${inicio + 1} a ${fin} (${parteDatos.length} registros)`);
+    }
+    
+    // 11. Preparar libro destino
+    console.log('\n9. Preparando libro destino...');
+    const libroDestino = SpreadsheetApp.openById(LIBRO_DESTINO_ID);
+    let hojaDestino = libroDestino.getSheetByName(HOJA_DESTINO);
+    
+    if (!hojaDestino) {
+      hojaDestino = libroDestino.insertSheet(HOJA_DESTINO);
+    }
+    
+    // Limpiar solo datos
+    const ultimaFila = hojaDestino.getLastRow();
+    if (ultimaFila >= FILA_INICIO_DATOS) {
+      hojaDestino.getRange(FILA_INICIO_DATOS, 1, ultimaFila - FILA_INICIO_DATOS + 1, 
+                          Math.max(hojaDestino.getLastColumn(), cabeceras.length))
+                .clearContent();
+    }
+    
+    // Escribir cabeceras
+    hojaDestino.getRange(1, 1, 1, cabeceras.length).setValues([cabeceras]);
+    
+    // 12. Transferir datos
+    console.log('\n10. Transferiendo datos...');
+    const archivosTemporales = [];
+    let filaDestinoActual = FILA_INICIO_DATOS;
+    
+    for (const parte of partesDatos) {
+      console.log(`\n--- Parte ${parte.indice} ---`);
+      
+      // Crear archivo temporal
+      const nombreParte = `AppSheet_Parte_${parte.indice}_${new Date().getTime()}`;
+      const nuevoLibro = SpreadsheetApp.create(nombreParte);
+      const hojaParte = nuevoLibro.getActiveSheet();
+      
+      // Escribir cabeceras
+      hojaParte.getRange(1, 1, 1, cabeceras.length).setValues([cabeceras]);
+      
+      // Escribir datos
+      if (parte.datos.length > 0) {
+        hojaParte.getRange(2, 1, parte.datos.length, cabeceras.length)
+                .setValues(parte.datos);
+        
+        // Transferir al libro destino
+        hojaDestino.getRange(filaDestinoActual, 1, parte.datos.length, cabeceras.length)
+                  .setValues(parte.datos);
+        
+        console.log(`✓ ${parte.datos.length} registros transferidos`);
+        
+        filaDestinoActual += parte.datos.length;
+      }
+      
+      // Guardar archivo temporal
+      const archivoParte = DriveApp.getFileById(nuevoLibro.getId());
+      archivosTemporales.push({
+        archivo: archivoParte,
+        nombre: nombreParte,
+        registros: parte.datos.length
+      });
+      
+      Utilities.sleep(300);
+    }
+    
+    // 13. Aplicar formato de porcentaje a las columnas convertidas
+    console.log('\n11. Aplicando formatos de porcentaje...');
+    if (columnasConPorcentajes.length > 0) {
+      aplicarFormatoPorcentaje(hojaDestino, columnasConPorcentajes, FILA_INICIO_DATOS, totalRegistros);
+      console.log(`✓ Formato de porcentaje aplicado a ${columnasConPorcentajes.length} columnas`);
+    }
+    
+    // 14. Eliminar archivos temporales
+    console.log('\n12. Eliminando archivos temporales...');
+    archivosTemporales.forEach(temp => {
+      try {
+        temp.archivo.setTrashed(true);
+      } catch (e) {
+        console.log(`⚠️ No se pudo eliminar ${temp.nombre}`);
+      }
+    });
+    
+    // 15. Verificación final
+    console.log('\n13. Verificación final...');
+    const registrosTransferidos = contarRegistrosNoVacios(hojaDestino, FILA_INICIO_DATOS, totalRegistros);
+    
+    console.log('\n=== RESUMEN FINAL ===');
+    console.log(`Archivo: ${csvFileName}`);
+    console.log(`Delimitador: "${delimitador}"`);
+    console.log(`Cabeceras: ${cabeceras.length}`);
+    console.log(`Registros originales: ${totalRegistros}`);
+    console.log(`Registros transferidos: ${registrosTransferidos}`);
+    console.log(`Columnas con porcentajes: ${columnasConPorcentajes.length}`);
+    console.log(`Porcentajes convertidos: ${porcentajesConvertidos}`);
+    console.log(`Partes creadas: ${partesDatos.length}`);
+    
+    if (totalRegistros === registrosTransferidos) {
+      console.log('✅ TRANSFERENCIA COMPLETA');
+    } else {
+      console.log(`⚠️ DIFERENCIA: ${totalRegistros - registrosTransferidos} registros`);
+    }
+    
+    // Mostrar columnas convertidas
+    if (columnasConPorcentajes.length > 0) {
+      console.log('\n=== COLUMNAS CON PORCENTAJES CONVERTIDOS ===');
+      columnasConPorcentajes.forEach(col => {
+        console.log(`Columna ${col.indice + 1}: "${cabeceras[col.indice]}"`);
+      });
+    }
+    
+    return {
+      success: true,
+      totalRegistros: totalRegistros,
+      transferidos: registrosTransferidos,
+      columnasConPorcentajes: columnasConPorcentajes.length,
+      porcentajesConvertidos: porcentajesConvertidos,
+      delimitador: delimitador
+    };
+    
+  } catch (error) {
+    console.error('❌ ERROR:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// FUNCIÓN PARA IDENTIFICAR COLUMNAS CON PORCENTAJES
+function identificarColumnasConPorcentajes(lineas) {
+  const cabeceras = lineas[0];
+  const datos = lineas.slice(1);
+  
+  const columnasConPorcentajes = [];
+  const estadisticas = {
+    columnasAnalizadas: cabeceras.length,
+    muestrasAnalizadas: Math.min(100, datos.length),
+    porcentajesEncontrados: 0
+  };
+  
+  // Analizar cada columna
+  for (let col = 0; col < cabeceras.length; col++) {
+    let tienePorcentajes = false;
+    const ejemplos = [];
+    let conteoPorcentajes = 0;
+    let muestrasAnalizadas = 0;
+    
+    // Analizar muestras de esta columna (primeros 100 registros o todos si son menos)
+    const muestras = Math.min(100, datos.length);
+    
+    for (let fila = 0; fila < muestras; fila++) {
+      if (fila < datos.length && col < datos[fila].length) {
+        const valor = datos[fila][col];
+        muestrasAnalizadas++;
+        
+        if (esPorcentaje(valor)) {
+          tienePorcentajes = true;
+          conteoPorcentajes++;
+          
+          // Guardar algunos ejemplos (máximo 5)
+          if (ejemplos.length < 5) {
+            ejemplos.push(valor);
+          }
+        }
+      }
+    }
+    
+    // Si más del 20% de las muestras son porcentajes, considerar que la columna tiene porcentajes
+    const umbralPorcentaje = 0.2; // 20%
+    const proporcionPorcentajes = muestrasAnalizadas > 0 ? conteoPorcentajes / muestrasAnalizadas : 0;
+    
+    if (tienePorcentajes && proporcionPorcentajes >= umbralPorcentaje) {
+      columnasConPorcentajes.push({
+        indice: col,
+        nombre: cabeceras[col],
+        ejemplos: ejemplos,
+        proporcion: proporcionPorcentajes,
+        totalMuestras: muestrasAnalizadas,
+        totalPorcentajes: conteoPorcentajes
+      });
+      
+      estadisticas.porcentajesEncontrados++;
+    }
+  }
+  
+  return { columnasConPorcentajes, estadisticas };
+}
+
+// FUNCIÓN PARA DETERMINAR SI UN VALOR ES UN PORCENTAJE
+function esPorcentaje(valor) {
+  if (typeof valor !== 'string' || valor === null || valor === undefined) {
+    return false;
+  }
+  
+  const str = valor.toString().trim();
+  
+  // Patrones de porcentaje:
+  // 1. Termina con % (ej: "75%", "12.5%", "100 %")
+  // 2. Contiene % en medio (ej: "75 % completado")
+  // 3. Es un número seguido de espacio y % (ej: "75 %")
+  
+  if (str.includes('%')) {
+    // Extraer la parte numérica
+    const match = str.match(/([0-9]+\.?[0-9]*)\s*%/);
+    if (match) {
+      const numero = parseFloat(match[1]);
+      // Verificar que sea un número válido y esté en rango razonable
+      return !isNaN(numero) && numero >= 0 && numero <= 1000; // Permite hasta 1000% por si acaso
+    }
+  }
+  
+  return false;
+}
+
+// FUNCIÓN PARA CONVERTIR PORCENTAJE A DECIMAL
+function convertirPorcentajeAPorcentajeDecimal(valor) {
+  if (!esPorcentaje(valor)) {
+    return valor; // Devolver original si no es porcentaje
+  }
+  
+  const str = valor.toString().trim();
+  
+  // Extraer el número del porcentaje
+  const match = str.match(/([0-9]+\.?[0-9]*)\s*%/);
+  if (!match) {
+    return valor;
+  }
+  
+  const numero = parseFloat(match[1]);
+  
+  // Convertir a decimal (75% -> 0.75)
+  const decimal = numero / 100;
+  
+  // Redondear a 4 decimales para evitar errores de precisión
+  return Math.round(decimal * 10000) / 10000;
+}
+
+// FUNCIÓN PARA CONVERTIR PORCENTAJES EN LOS DATOS
+function convertirPorcentajesEnDatos(datos, columnasConPorcentajes) {
+  const datosConvertidos = [];
+  let registrosConvertidos = 0;
+  let porcentajesConvertidos = 0;
+  
+  for (let fila = 0; fila < datos.length; fila++) {
+    const registroOriginal = datos[fila];
+    const registroConvertido = [...registroOriginal]; // Copia del registro
+    
+    let registroTuvoConversion = false;
+    let conversionesEnRegistro = 0;
+    
+    // Convertir porcentajes en las columnas identificadas
+    for (const columna of columnasConPorcentajes) {
+      const indice = columna.indice;
+      
+      if (indice < registroOriginal.length) {
+        const valorOriginal = registroOriginal[indice];
+        
+        if (esPorcentaje(valorOriginal)) {
+          const valorConvertido = convertirPorcentajeAPorcentajeDecimal(valorOriginal);
+          
+          // Solo convertir si realmente cambió
+          if (valorOriginal !== valorConvertido.toString()) {
+            registroConvertido[indice] = valorConvertido;
+            registroTuvoConversion = true;
+            conversionesEnRegistro++;
+            porcentajesConvertidos++;
+          }
+        }
+      }
+    }
+    
+    datosConvertidos.push(registroConvertido);
+    
+    if (registroTuvoConversion) {
+      registrosConvertidos++;
+    }
+  }
+  
+  return {
+    datos: datosConvertidos,
+    estadisticas: {
+      registrosConvertidos: registrosConvertidos,
+      porcentajesConvertidos: porcentajesConvertidos,
+      totalRegistros: datos.length
+    }
+  };
+}
+
+// FUNCIÓN PARA APLICAR FORMATO DE PORCENTAJE EN GOOGLE SHEETS
+function aplicarFormatoPorcentaje(hoja, columnasConPorcentajes, filaInicio, totalRegistros) {
+  if (columnasConPorcentajes.length === 0 || totalRegistros === 0) {
+    return;
+  }
+  
+  // Para cada columna con porcentajes
+  for (const columna of columnasConPorcentajes) {
+    const indiceColumna = columna.indice + 1; // Google Sheets usa 1-based index
+    
+    // Crear rango para toda la columna (desde filaInicio)
+    const rango = hoja.getRange(filaInicio, indiceColumna, totalRegistros, 1);
+    
+    // Aplicar formato de porcentaje con 2 decimales
+    rango.setNumberFormat('0.00%');
+    
+    // Opcional: Aplicar estilo para que sea más legible
+    rango.setFontSize(10);
+  }
+  
+  // También aplicar formato a las cabeceras si queremos
+  const cabeceraRangos = columnasConPorcentajes.map(col => 
+    hoja.getRange(1, col.indice + 1)
+  );
+  
+  if (cabeceraRangos.length > 0) {
+    // Aplicar formato de texto a las cabeceras
+    cabeceraRangos.forEach(rango => {
+      rango.setFontWeight('bold');
+      rango.setBackground('#e8f0fe'); // Azul claro
+    });
+  }
+}
+
+// FUNCIÓN PARA MOSTRAR EJEMPLOS DE CONVERSIÓN DE PORCENTAJES
+function mostrarEjemplosPorcentajes() {
+  try {
+    console.log('=== EJEMPLOS DE CONVERSIÓN DE PORCENTAJES ===');
+    
+    const ejemplos = [
+      '75%',
+      '12.5%',
+      '100 %',
+      '50.25%',
+      '0%',
+      '33.33%',
+      '125%', // Más de 100%
+      ' 45 % ', // Con espacios
+      'N/A', // No es porcentaje
+      '100',
+      'abc%',
+      '50% completado', // Texto adicional
+      '75.5',
+      ''
+    ];
+    
+    console.log('\nConversiones:');
+    console.log('─'.repeat(50));
+    console.log('Valor original'.padEnd(20) + '| Es %'.padEnd(10) + '| Valor convertido'.padEnd(20));
+    console.log('─'.repeat(50));
+    
+    ejemplos.forEach(valor => {
+      const esPorc = esPorcentaje(valor);
+      const convertido = esPorc ? convertirPorcentajeAPorcentajeDecimal(valor) : 'N/A';
+      const originalStr = `"${valor}"`;
+      
+      console.log(
+        originalStr.padEnd(20) + '| ' + 
+        esPorc.toString().padEnd(8) + '| ' + 
+        (esPorc ? convertido.toString() : 'N/A').padEnd(18)
+      );
+    });
+    
+    console.log('─'.repeat(50));
+    
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+// FUNCIÓN PARA PROBAR LA CONVERSIÓN EN UN ARCHIVO ESPECÍFICO
+function probarConversionPorcentajes() {
+  try {
+    console.log('=== PRUEBA DE CONVERSIÓN DE PORCENTAJES ===');
+    
+    const CARPETA_DRIVE_ID = '17RfxtXxQk8EsQAly6dLiE3vvNyx5joET';
+    const carpeta = DriveApp.getFolderById(CARPETA_DRIVE_ID);
+    const archivos = carpeta.getFiles();
+    
+    let csvFile = null;
+    while (archivos.hasNext()) {
+      const archivo = archivos.next();
+      if (archivo.getName().includes('AppSheet.ViewData')) {
+        csvFile = archivo;
+        break;
+      }
+    }
+    
+    if (!csvFile) {
+      console.log('No se encontró CSV');
+      return;
+    }
+    
+    const contenido = csvFile.getBlob().getDataAsString('UTF-8');
+    const delimitador = detectarDelimitadorPorMuestreo(contenido, 100);
+    const { lineas } = parsearCSVConValidacion(contenido, delimitador);
+    
+    if (lineas.length < 2) {
+      console.log('No hay suficientes datos');
+      return;
+    }
+    
+    // Identificar columnas con porcentajes
+    const { columnasConPorcentajes } = identificarColumnasConPorcentajes(lineas);
+    
+    console.log(`\nEn el archivo "${csvFile.getName()}":`);
+    console.log(`Columnas totales: ${lineas[0].length}`);
+    console.log(`Registros totales: ${lineas.length - 1}`);
+    console.log(`Columnas con porcentajes: ${columnasConPorcentajes.length}`);
+    
+    if (columnasConPorcentajes.length > 0) {
+      console.log('\nDetalle de columnas con porcentajes:');
+      columnasConPorcentajes.forEach(col => {
+        console.log(`\nColumna ${col.indice + 1}: "${col.nombre}"`);
+        console.log(`  Proporción de %: ${(col.proporcion * 100).toFixed(1)}%`);
+        console.log(`  Muestras analizadas: ${col.totalMuestras}`);
+        console.log(`  Porcentajes encontrados: ${col.totalPorcentajes}`);
+        console.log(`  Ejemplos: ${col.ejemplos.map(e => `"${e}"`).join(', ')}`);
+        
+        // Mostrar algunas conversiones de ejemplo
+        console.log(`  Conversiones de ejemplo:`);
+        const datos = lineas.slice(1);
+        let conversionesMostradas = 0;
+        
+        for (let i = 0; i < Math.min(3, datos.length) && conversionesMostradas < 2; i++) {
+          if (i < datos.length && col.indice < datos[i].length) {
+            const valor = datos[i][col.indice];
+            if (esPorcentaje(valor)) {
+              const convertido = convertirPorcentajeAPorcentajeDecimal(valor);
+              console.log(`    "${valor}" → ${convertido}`);
+              conversionesMostradas++;
+            }
+          }
+        }
+      });
+    }
+    
+    // Mostrar ejemplos generales
+    console.log('\n' + '='.repeat(60));
+    console.log('EJEMPLOS DE CONVERSIÓN:');
+    console.log('='.repeat(60));
+    
+    const ejemplosConversion = [
+      { input: '75%', expected: 0.75 },
+      { input: '50.5%', expected: 0.505 },
+      { input: '0%', expected: 0 },
+      { input: '100%', expected: 1 },
+      { input: '12.34%', expected: 0.1234 },
+      { input: ' 25 % ', expected: 0.25 }
+    ];
+    
+    ejemplosConversion.forEach(ej => {
+      const esPorc = esPorcentaje(ej.input);
+      const convertido = convertirPorcentajeAPorcentajeDecimal(ej.input);
+      const correcto = esPorc && Math.abs(convertido - ej.expected) < 0.0001;
+      
+      console.log(
+        `"${ej.input}"`.padEnd(15) + 
+        `→ ${convertido}`.padEnd(15) + 
+        `| Esperado: ${ej.expected}`.padEnd(20) + 
+        `| ${correcto ? '✅' : '❌'}`
+      );
+    });
+    
+  } catch (error) {
+    console.error('Error en prueba:', error);
+  }
+}
+
+// FUNCIONES DE UTILIDAD (mantener las anteriores)
+function detectarDelimitadorPorMuestreo(contenido, muestraLineas = 100) {
+  // ... (mantener función anterior sin cambios)
+  const lineas = contenido.split('\n').filter(l => l.trim() !== '');
+  const lineasMuestra = lineas.slice(0, Math.min(muestraLineas, lineas.length));
+  
+  const conteos = {
+    ',': 0,
+    ';': 0,
+    '\t': 0,
+    '|': 0
+  };
+  
+  lineasMuestra.forEach(linea => {
+    let enComillas = false;
+    
+    for (let i = 0; i < linea.length; i++) {
+      const char = linea[i];
+      
+      if (char === '"') {
+        if (i < linea.length - 1 && linea[i + 1] === '"') {
+          i++;
+        } else {
+          enComillas = !enComillas;
+        }
+      } else if (!enComillas) {
+        if (conteos[char] !== undefined) {
+          conteos[char]++;
+        }
+      }
+    }
+  });
+  
+  let delimitador = ';';
+  let maxConteo = 0;
+  
+  for (const [char, count] of Object.entries(conteos)) {
+    if (count > maxConteo) {
+      maxConteo = count;
+      delimitador = char;
+    }
+  }
+  
+  return delimitador;
+}
+
+function parsearCSVConValidacion(contenido, delimitador) {
+  // ... (mantener función anterior sin cambios)
+  const lineas = [];
+  const problemas = [];
+  
+  const lineasCrudas = contenido.split('\n');
+  let filaActual = [];
+  let campoActual = '';
+  let enComillas = false;
+  let numeroLinea = 0;
+  
+  for (let i = 0; i < lineasCrudas.length; i++) {
+    numeroLinea++;
+    const linea = lineasCrudas[i];
+    
+    if (linea.trim() === '' && !enComillas) {
+      continue;
+    }
+    
+    for (let j = 0; j < linea.length; j++) {
+      const char = linea[j];
+      
+      if (char === '"' && j < linea.length - 1 && linea[j + 1] === '"') {
+        campoActual += '"';
+        j++;
+      } else if (char === '"') {
+        enComillas = !enComillas;
+      } else if (char === delimitador && !enComillas) {
+        filaActual.push(campoActual);
+        campoActual = '';
+      } else {
+        campoActual += char;
+      }
+    }
+    
+    if (!enComillas) {
+      filaActual.push(campoActual);
+      
+      if (filaActual.some(campo => campo.trim() !== '') || i === 0) {
+        lineas.push(filaActual);
+      }
+      
+      filaActual = [];
+      campoActual = '';
+    } else {
+      campoActual += '\n';
+    }
+  }
+  
+  if (campoActual !== '' || filaActual.length > 0) {
+    filaActual.push(campoActual);
+    if (filaActual.some(campo => campo.trim() !== '')) {
+      lineas.push(filaActual);
+    }
+  }
+  
+  if (lineas.length > 0) {
+    const columnasEsperadas = lineas[0].length;
+    
+    for (let i = 1; i < lineas.length; i++) {
+      if (lineas[i].length !== columnasEsperadas) {
+        problemas.push({
+          linea: i + 1,
+          mensaje: `Columnas inconsistentes: ${lineas[i].length} vs ${columnasEsperadas}`,
+          ejemplo: lineas[i].join(delimitador)
+        });
+        
+        while (lineas[i].length < columnasEsperadas) {
+          lineas[i].push('');
+        }
+        if (lineas[i].length > columnasEsperadas) {
+          lineas[i] = lineas[i].slice(0, columnasEsperadas);
+        }
+      }
+    }
+  }
+  
+  return { lineas, problemas };
+}
+
+function validarRegistrosCriticos(datos, columnasEsperadas) {
+  // ... (mantener función anterior sin cambios)
+  const problemas = [];
+  
+  for (let i = 0; i < Math.min(10, datos.length); i++) {
+    const registro = datos[i];
+    if (registro.length !== columnasEsperadas) {
+      problemas.push({
+        registro: i + 1,
+        mensaje: `Columnas incorrectas: ${registro.length} vs ${columnasEsperadas}`,
+        datos: registro
+      });
+    }
+  }
+  
+  const inicio = Math.max(0, 761 - 5);
+  const fin = Math.min(datos.length, 761 + 5);
+  
+  for (let i = inicio; i < fin; i++) {
+    const registro = datos[i];
+    if (registro.length !== columnasEsperadas) {
+      problemas.push({
+        registro: i + 1,
+        mensaje: `Columnas incorrectas: ${registro.length} vs ${columnasEsperadas}`,
+        datos: registro
+      });
+    }
+  }
+  
+  return { problemas };
+}
+
+function contarRegistrosNoVacios(hoja, filaInicio, maxFilas) {
+  const rango = hoja.getRange(filaInicio, 1, maxFilas, 1);
+  const valores = rango.getValues();
+  
+  let contador = 0;
+  for (const fila of valores) {
+    if (fila[0] && fila[0].toString().trim() !== '') {
+      contador++;
+    }
+  }
+  
+  return contador;
+}
+
+// MENÚ PRINCIPAL MEJORADO
+function menuCompleto() {
+  console.log('='.repeat(60));
+  console.log('   PROCESADOR CSV CON CONVERSIÓN DE PORCENTAJES');
+  console.log('='.repeat(60));
+  console.log('\nFUNCIONES DISPONIBLES:');
+  console.log('1. mostrarEjemplosPorcentajes() - Muestra ejemplos de conversión');
+  console.log('2. probarConversionPorcentajes() - Prueba conversión en tu archivo');
+  console.log('3. procesarCSVConValidacionYPorcentajes() - PROCESO COMPLETO');
+  console.log('\nRECOMENDACIÓN:');
+  console.log('1. Primero prueba con mostrarEjemplosPorcentajes()');
+  console.log('2. Luego prueba con probarConversionPorcentajes()');
+  console.log('3. Finalmente ejecuta el proceso completo');
+  console.log('='.repeat(60));
+}
