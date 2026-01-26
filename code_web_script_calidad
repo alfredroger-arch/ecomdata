@@ -1,0 +1,132 @@
+// ============================================
+// CONFIGURACIÓN GENERAL - MODIFICAR AQUÍ
+// ============================================
+
+const CONFIG = {
+  appTitle: "Portal de Informes - Área de Calidad Cualidativa",  // ← CAMBIAR TÍTULO DE LA PÁGINA
+  companyName: "IMPULSA A365",               // ← CAMBIAR NOMBRE DE LA EMPRESA
+  primaryColor: "#1a237e",                           // ← COLOR AZUL OSCURO PRINCIPAL
+  secondaryColor: "#0d47a1",                         // ← COLOR AZUL MEDIO
+  accentColor: "#d32f2f",                            // ← COLOR ROJO CORPORATIVO
+  lightColor: "#e3f2fd",                             // ← COLOR FONDO CLARO
+  textColor: "#212121",                              // ← COLOR TEXTO
+  textSize: "14px",                                  // ← TAMAÑO DE TEXTO (NO CAMBIAR)
+  fontFamily: "Lato, Arial, sans-serif"              // ← FUENTE (NO CAMBIAR)
+};
+
+// ============================================
+// LISTA DE DASHBOARDS - MODIFICAR ESTE ARRAY
+// ============================================
+
+const DASHBOARDS = [  // ← AÑADIR/QUITAR/MODIFICAR DASHBOARDS AQUÍ
+  {
+    id: 1,                                           // ← ID ÚNICO (no repetir)
+    titulo: "PORTABILIDAD MASIVOS",                 // ← TÍTULO DEL DASHBOARD
+    descripcion: "Resultados de los monitoreos realizados por el área de calidad", // ← DESCRIPCIÓN
+    categoria: "Calidad",                          // ← CATEGORÍA (aparece en filtro)
+    fecha: "2025-12-20",                             // ← FECHA formato YYYY-MM-DD
+    url: "https://lookerstudio.google.com/reporting/c7b01004-28aa-4097-8e4b-7e495a97eed0", // ← URL COMPLETA de Looker Studio
+    icono: "📊",                                     // ← EMOJI (📊📈💰🏭📱👥⭐🚚✅🔍🎯⚙️)
+    prioridad: "alta",                               // ← alta/media/baja
+    actualizado: "Hoy",                              // ← Hoy/Ayer/2 días/1 semana
+    creador: "A.M.S."                        // ← QUIÉN LO CREÓ
+  },
+  {
+    id: 2,
+    titulo: "PREVENTIVA FIJA",                 // ← TÍTULO DEL DASHBOARD
+    descripcion: "Resultados de los monitoreos realizados por el área de calidad", // ← DESCRIPCIÓN
+    categoria: "Calidad",                          // ← CATEGORÍA (aparece en filtro)
+    fecha: "2026-01-13",                             // ← FECHA formato YYYY-MM-DD
+    url: "https://lookerstudio.google.com/reporting/4cdca744-6798-4c32-969b-1db8cc1eb27d", // ← URL COMPLETA de Looker Studio
+    icono: "📊",                                     // ← EMOJI (📊📈💰🏭📱👥⭐🚚✅🔍🎯⚙️)
+    prioridad: "alta",                               // ← alta/media/baja
+    actualizado: "Hoy",                              // ← Hoy/Ayer/2 días/1 semana
+    creador: "A.M.S."                        // ← QUIÉN LO CREÓ
+  },
+  // ============================================
+  // PARA AGREGAR MÁS DASHBOARDS, COPIAR Y PEGAR:
+  // ============================================
+  // {
+  //   id: 3,                                      // ← INCREMENTAR EL NÚMERO
+  //   titulo: "NUEVO DASHBOARD",                  // ← PONER TÍTULO
+  //   descripcion: "Descripción breve",           // ← DESCRIPCIÓN
+  //   categoria: "Nueva Categoría",               // ← CATEGORÍA (aparecerá en filtro)
+  //   fecha: "2024-01-01",                        // ← FECHA ACTUAL
+  //   url: "https://lookerstudio.google.com/...", // ← URL COMPLETA
+  //   icono: "📊",                                // ← ELEGIR EMOJI
+  //   prioridad: "media",                         // ← alta/media/baja
+  //   actualizado: "Hoy",                         // ← Hoy/Ayer/2 días/1 semana
+  //   creador: "Tu Nombre"                        // ← TU NOMBRE O DEPARTAMENTO
+  // },
+  // ============================================
+  // SIGUEN LOS DASHBOARDS EXISTENTES...
+  // ============================================
+  {
+    id: 3,
+    titulo: "123 PREPAGO",                 // ← TÍTULO DEL DASHBOARD
+    descripcion: "Resultados de los monitoreos realizados por el área de calidad", // ← DESCRIPCIÓN
+    categoria: "Calidad",                          // ← CATEGORÍA (aparece en filtro)
+    fecha: "2026-01-23",                             // ← FECHA formato YYYY-MM-DD
+    url: "https://lookerstudio.google.com/reporting/22717fdc-2357-4570-a559-0531dbe4baf6", // ← URL COMPLETA de Looker Studio
+    icono: "📊",                                     // ← EMOJI (📊📈💰🏭📱👥⭐🚚✅🔍🎯⚙️)
+    prioridad: "alta",                               // ← alta/media/baja
+    actualizado: "Hoy",                              // ← Hoy/Ayer/2 días/1 semana
+    creador: "A.M.S."                        // ← QUIÉN LO CREÓ
+  },
+  {
+    id: 4,
+    titulo: "Informe General",                 // ← TÍTULO DEL DASHBOARD
+    descripcion: "Resultados generales de los principales indicadores de Calidad", // ← DESCRIPCIÓN
+    categoria: "Calidad",                          // ← CATEGORÍA (aparece en filtro)
+    fecha: "2025-01-01",                             // ← FECHA formato YYYY-MM-DD
+    url: "https://lookerstudio.google.com/reporting/22717fdc-2357-4570-a559-0531dbe4baf6", // ← URL COMPLETA de Looker Studio
+    icono: "📊",                                     // ← EMOJI (📊📈💰🏭📱👥⭐🚚✅🔍🎯⚙️)
+    prioridad: "media",                               // ← alta/media/baja
+    actualizado: "Hoy",                              // ← Hoy/Ayer/2 días/1 semana
+    creador: "A.M.S."                        // ← QUIÉN LO CREÓ
+  },
+
+];
+
+// ============================================
+// FUNCIONES - NO MODIFICAR
+// ============================================
+
+function doGet() {
+  return HtmlService.createTemplateFromFile('Index')
+    .evaluate()
+    .setTitle(CONFIG.appTitle)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function getConfig() {
+  return CONFIG;
+}
+
+function getDashboards() {
+  return DASHBOARDS;
+}
+
+function getDashboardsPorCategoria(categoria) {
+  if (!categoria || categoria === 'todos') {
+    return DASHBOARDS;
+  }
+  return DASHBOARDS.filter(dashboard => dashboard.categoria === categoria);
+}
+
+function getCategorias() {
+  const categorias = [...new Set(DASHBOARDS.map(d => d.categoria))];
+  return categorias.sort();
+}
+
+function buscarDashboards(termino) {
+  if (!termino) return DASHBOARDS;
+  
+  const terminoLower = termino.toLowerCase();
+  return DASHBOARDS.filter(dashboard => 
+    dashboard.titulo.toLowerCase().includes(terminoLower) ||
+    dashboard.descripcion.toLowerCase().includes(terminoLower) ||
+    dashboard.categoria.toLowerCase().includes(terminoLower) ||
+    dashboard.creador.toLowerCase().includes(terminoLower)
+  );
+}
