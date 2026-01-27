@@ -1,0 +1,52 @@
+Desarrollar un formulario en google script cuyos campos en su mayoria tendran listas deplegables pero que los datos de la lista se extraeran de un libro en google sheets 
+de la siguiente manera:
+
+Estetica:
+Diseño con colores en escala de azules y tonos rojas, diseño corporativo con iconos en texto del tipo estadistico.
+
+Campos: con los siguientes campos:
+
+"Año" que sera un numero entero de una lista desplegable
+"Mes" que será texto de una lista desplegable
+"Cliente" que será texto de una lista desplegable
+"Campaña"  que será texto de una lista desplegable
+"Responsable"  que será texto de una lista desplegable
+"Indicador" que sera texto de una lista desplegable
+"Valor" que sera una casilla para llenar pero el formato dependera de un parametro que se especificara mas adelante
+"Comentarios" texto libre para poder colocar un comentario. (La cantidad de caracteres será el maximo que soporte una celda de google sheets)
+
+Donde:
+
+Año: Será una lista desplegable que saldrá del libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI   de la hoja llamada "tiempo" desde la fila 2  hasta la fila 1000 de la columna A
+(detectar la cantidad de datos de hasta fila 1000) debido a que se agregará o quitara valores en el futuro.
+
+Mes: Será una lista desplegable que saldrá del libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI   de la hoja llamada "tiempo" desde la fila 2  hasta la fila 1000 de la columna B
+(detectar la cantidad de datos de hasta fila 1000) debido a que se agregará o quitara valores en el futuro.
+
+Cliente: Será una lista desplegable que saldrá del libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI   de la hoja llamada "cuenta" desde la fila 2  hasta la fila 1000 de la columna A
+(detectar la cantidad de datos de hasta fila 1000) debido a que se agregará o quitara valores en el futuro.
+
+Campaña: Será una lista desplegable que saldrá del libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI   de la hoja llamada "cuenta" desde la fila 2  hasta la fila 1000 de la columna B
+(detectar la cantidad de datos de hasta fila 1000) debido a que se agregará o quitara valores en el futuro.  Para los campos Cliente y Campaña deben depender uno del otro, por ejemplo si selecciono
+un Cliente especifico me mostrará los valores de las Campaña según los datos del libro, si cambio el Cliente cambiara los valores de Campaña segun los datos del libro google sheets.
+
+Responsable: Cliente: Será una lista desplegable que saldrá del libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI   de la hoja llamada "cuenta" desde la fila 2  hasta la fila 1000 de la columna C
+(detectar la cantidad de datos de hasta fila 1000) debido a que se agregará o quitara valores en el futuro.
+
+Indicador: Será una lista desplegable que saldrá del libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI   de la hoja llamada "indicador" desde la fila 2  hasta la fila 1000 de la columna A
+(detectar la cantidad de datos de hasta fila 1000) debido a que se agregará o quitara valores en el futuro.
+
+Para el fomato del campo "Valor" seguir la siguiente regla que esta ubicada en libro sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI hoja "indicador" columna B, por ejemplo: 
+"Nota Calidad" es porcentaje, solo se debe colocar valores numericos menores e igual a 1, si el indicador es "Muestra programada" este será valor entero, no permitirá colocar un valor decimal
+o texto.
+
+Para el campo "Comentarios" no hay problemas, es solo una casilla de texto.
+
+IMPORTANTE.
+
+Cuando se envié la información este debe ser guardada en en mismo libro de google sheets con ID: 1eF9n-PCBluNMFO1VE1evSx5NK2612IRSn2_8HPAzUPI  pero en la hoja "base_datos"  desde la
+fila 2 columna A ya que las cabeceras estan en las columnas de la fila 1 en el orden de campos indicado, al final de los campos en la columna E desde la fila 2 agregar el dato de fecha y hora de registro
+con la zona horaria lima-botoga
+
+
+
