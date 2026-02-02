@@ -1,0 +1,213 @@
+function procesarArchivoExcel() {
+  // Configuración
+  const CARPETA_ID = '1tzFdirvzIl4Hha3R9owvm0_aNuUGA9dx';
+  const DESTINO_SHEET_ID = '1L1K3rwxgRAjqnfWio1ZBEZsiVzVNSfmSnely8w-Kg9I';
+  const HOJA_ORIGEN = 'Sheet0';
+  const HOJA_DESTINO = 'BASE';
+  
+  try {
+    // 1. Obtener el archivo Excel de la carpeta
+    const carpeta = DriveApp.getFolderById(CARPETA_ID);
+    const archivos = carpeta.getFilesByType(MimeType.MICROSOFT_EXCEL);
+    
+    let archivoCount = 0;
+    let archivoExcel = null;
+    while (archivos.hasNext()) {
+      archivoCount++;
+      if (archivoCount > 1) {
+        throw new Error('Se encontró más de un archivo Excel en la carpeta. Solo debe haber uno.');
+      }
+      archivoExcel = archivos.next();
+    }
+    
+    if (archivoCount === 0) {
+      throw new Error('No se encontró ningún archivo Excel en la carpeta.');
+    }
+    
+    console.log(`Archivo encontrado: ${archivoExcel.getName()}`);
+    
+    // 2. Convertir Excel a Google Sheets temporalmente
+    console.log('Convirtiendo Excel a Google Sheets...');
+    const archivoSheets = Drive.Files.copy(
+      {
+        title: 'Temp_' + archivoExcel.getName().replace('.xlsx', '').replace('.xls', ''),
+        mimeType: MimeType.GOOGLE_SHEETS
+      },
+      archivoExcel.getId()
+    );
+    
+    // 3. Abrir el archivo convertido
+    const spreadsheet = SpreadsheetApp.openById(archivoSheets.id);
+    let sheet = null;
+    
+    // Intentar obtener la hoja con diferentes nombres posibles
+    sheet = spreadsheet.getSheetByName(HOJA_ORIGEN);
+    if (!sheet) {
+      // Intentar con el primer nombre por defecto
+      sheet = spreadsheet.getSheets()[0];
+      console.log(`Hoja "${HOJA_ORIGEN}" no encontrada, usando la primera hoja: ${sheet.getName()}`);
+    }
+    
+    if (!sheet) {
+      throw new Error(`No se encontró ninguna hoja en el archivo.`);
+    }
+    
+    // 4. Obtener todos los datos
+    const datos = sheet.getDataRange().getValues();
+    
+    if (datos.length <= 1) {
+      throw new Error('El archivo no tiene datos además de las cabeceras.');
+    }
+    
+    const cabeceras = datos[0];
+    const filasDatos = datos.slice(1); // Excluir cabeceras
+    const totalFilas = filasDatos.length;
+    
+    console.log(`Total de filas de datos: ${totalFilas}`);
+    console.log(`Total de columnas: ${cabeceras.length}`);
+    
+    // 5. Calcular tamaño de cada parte
+    const partes = 3;
+    const filasPorParte = Math.ceil(totalFilas / partes);
+    
+    // 6. Limpiar hoja destino
+    console.log('Limpiando hoja destino...');
+    const spreadsheetDestino = SpreadsheetApp.openById(DESTINO_SHEET_ID);
+    let sheetDestino = spreadsheetDestino.getSheetByName(HOJA_DESTINO);
+    
+    if (!sheetDestino) {
+      // Intentar crear la hoja si no existe
+      sheetDestino = spreadsheetDestino.insertSheet(HOJA_DESTINO);
+      console.log(`Hoja "${HOJA_DESTINO}" creada.`);
+    }
+    
+    // Limpiar desde la fila 2
+    const ultimaFila = sheetDestino.getLastRow();
+    if (ultimaFila > 1) {
+      sheetDestino.getRange(2, 1, ultimaFila - 1, sheetDestino.getLastColumn()).clearContent();
+    }
+    
+    // 7. Crear y procesar las 3 partes
+    const archivosTemporales = [];
+    let filasTransferidasTotales = 0;
+    
+    for (let i = 0; i < partes; i++) {
+      console.log(`Procesando parte ${i + 1} de ${partes}...`);
+      
+      const inicio = i * filasPorParte;
+      const fin = Math.min(inicio + filasPorParte, totalFilas);
+      
+      if (inicio >= fin) {
+        console.log(`Parte ${i + 1} sin datos, saltando...`);
+        continue;
+      }
+      
+      const filasParte = filasDatos.slice(inicio, fin);
+      
+      // Crear nuevo array con cabeceras + datos de la parte
+      const datosParte = [cabeceras, ...filasParte];
+      
+      // Crear nuevo archivo temporal
+      const nombreParte = `Parte_${i + 1}_${archivoExcel.getName().replace('.xlsx', '').replace('.xls', '')}`;
+      const tempSpreadsheet = SpreadsheetApp.create(nombreParte);
+      const tempSheet = tempSpreadsheet.getSheets()[0]; // Obtener la primera hoja
+      
+      // Asegurarse de que el rango sea suficiente
+      const numFilas = datosParte.length;
+      const numColumnas = cabeceras.length;
+      tempSheet.getRange(1, 1, numFilas, numColumnas).setValues(datosParte);
+      
+      archivosTemporales.push({
+        id: tempSpreadsheet.getId(),
+        nombre: nombreParte,
+        datos: datosParte
+      });
+      
+      // Transferir datos al destino (sin cabeceras)
+      if (filasParte.length > 0) {
+        let filaInicioDestino = 2;
+        if (i > 0 || sheetDestino.getLastRow() > 1) {
+          filaInicioDestino = sheetDestino.getLastRow() + 1;
+        }
+        
+        sheetDestino.getRange(filaInicioDestino, 1, filasParte.length, cabeceras.length).setValues(filasParte);
+        filasTransferidasTotales += filasParte.length;
+        console.log(`Transferidas ${filasParte.length} filas a la hoja destino`);
+      }
+    }
+    
+    // 8. Eliminar archivos temporales
+    console.log('Eliminando archivos temporales...');
+    
+    // Eliminar archivo convertido temporal
+    try {
+      DriveApp.getFileById(archivoSheets.id).setTrashed(true);
+      console.log('Archivo temporal convertido eliminado.');
+    } catch (e) {
+      console.warn('No se pudo eliminar el archivo temporal convertido:', e.message);
+    }
+    
+    // Eliminar archivos temporales de partes
+    archivosTemporales.forEach(archivoTemp => {
+      try {
+        DriveApp.getFileById(archivoTemp.id).setTrashed(true);
+      } catch (e) {
+        console.warn(`No se pudo eliminar ${archivoTemp.nombre}:`, e.message);
+      }
+    });
+    
+    // 9. Eliminar archivo original de Excel
+    try {
+      //archivoExcel.setTrashed(true);
+      //console.log('Archivo original eliminado.');
+    } catch (e) {
+      //console.warn('No se pudo eliminar el archivo original:', e.message);
+    }
+    
+    console.log('Proceso completado exitosamente.');
+    console.log(`Total de filas transferidas: ${filasTransferidasTotales}`);
+    console.log(`Columnas transferidas: ${cabeceras.length}`);
+    
+    return {
+      success: true,
+      message: `Proceso completado. ${filasTransferidasTotales} filas transferidas en 3 partes.`,
+      filasTransferidas: filasTransferidasTotales,
+      columnas: cabeceras.length
+    };
+    
+  } catch (error) {
+    console.error('Error en el proceso:', error.toString());
+    console.error('Stack trace:', error.stack);
+    throw error;
+  }
+}
+
+// Función para verificar la configuración
+function testConfiguracion() {
+  try {
+    // Verificar acceso a la carpeta
+    const carpeta = DriveApp.getFolderById('1tzFdirvzIl4Hha3R9owvm0_aNuUGA9dx');
+    console.log('✓ Acceso a carpeta OK:', carpeta.getName());
+    
+    // Verificar acceso al spreadsheet destino
+    const spreadsheet = SpreadsheetApp.openById('1L1K3rwxgRAjqnfWio1ZBEZsiVzVNSfmSnely8w-Kg9I');
+    console.log('✓ Acceso a spreadsheet destino OK:', spreadsheet.getName());
+    
+    // Verificar hoja BASE
+    const sheet = spreadsheet.getSheetByName('BASE');
+    if (sheet) {
+      console.log('✓ Hoja BASE encontrada');
+    } else {
+      console.log('⚠ Hoja BASE no encontrada, se creará automáticamente');
+    }
+    
+    // Verificar servicios
+    console.log('✓ Todos los servicios están disponibles');
+    
+    return 'Configuración OK. Puedes ejecutar procesarArchivoExcel()';
+    
+  } catch (error) {
+    console.error('Error en configuración:', error);
+    return 'Error en configuración: ' + error.message;
+  }
+}
